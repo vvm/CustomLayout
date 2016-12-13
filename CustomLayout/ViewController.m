@@ -36,6 +36,8 @@ static NSString* const cellIdentifier = @"cell";
 {
     UICollectionViewCell* cell = [collectionView dequeueReusableCellWithReuseIdentifier:cellIdentifier forIndexPath:indexPath];
     cell.backgroundColor = [UIColor redColor];
+    UILabel* label = [cell viewWithTag:10];
+    label.text = [NSString stringWithFormat:@"%d",indexPath.item];
     return cell;
 }
 

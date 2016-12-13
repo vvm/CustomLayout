@@ -8,56 +8,38 @@
 
 #import "CenterShowLayout.h"
 
-
-static const float centerItemWith = 65.0;
-static const float normalItemWith = 50.0;
-static const float itemMargin = 10.0;
-
 @interface CenterShowLayout ()
 
 @property (nonatomic, assign) float emptyBlockLength;
 @property (nonatomic, assign) float distancePerScroller;
-@property (nonatomic, assign) float centerY;
-@property (nonatomic, assign) float detalScale;
+
+@property (nonatomic, assign) CGPoint viewCenter;
+
 @property (nonatomic, assign) NSInteger totalCount;
 
 @end
 
 @implementation CenterShowLayout
 
-- (instancetype)init
-{
-    self = [super init];
-    if (self) {
-        self.scrollDirection = UICollectionViewScrollDirectionHorizontal;
-        self.itemSize = CGSizeMake(normalItemWith, normalItemWith);
-    }
-    return self;
-}
-
-- (void)awakeFromNib
-{
-    [super awakeFromNib];
-}
-
 - (void)prepareLayout
 {
     [super prepareLayout];
-    _emptyBlockLength = (self.collectionView.bounds.size.width - centerItemWith) / 2.0;
+    
+    _emptyBlockLength = (self.collectionView.bounds.size.width - self.itemSize.width * (1.0 + _detalScale)) / 2.0;
+    _viewCenter = CGPointMake(self.collectionView.bounds.size.width / 2.0, self.collectionView.bounds.size.height / 2.0);
+    
     NSInteger scetionCount = self.collectionView.numberOfSections;
     NSAssert(scetionCount == 1, @"Only support one section now");
     _totalCount = [self.collectionView numberOfItemsInSection:0];
-    _centerY = self.collectionView.bounds.size.height / 2.0;
-    _detalScale = (centerItemWith - normalItemWith) / normalItemWith;
     
-    _distancePerScroller = normalItemWith + itemMargin;
+    _distancePerScroller = self.itemSize.width + self.minimumInteritemSpacing;
 }
 
 - (CGSize)collectionViewContentSize
 {
     CGSize size = self.collectionView.bounds.size;
     if (_totalCount > 2) {
-        size.width += (_totalCount - 1) * (normalItemWith + itemMargin);
+        size.width += (_totalCount - 1) * (self.itemSize.width + self.minimumInteritemSpacing);
     }
     return size;
 }
@@ -68,13 +50,13 @@ static const float itemMargin = 10.0;
     int areaBeginIndex = floor(offset.x / _distancePerScroller);
     float areaBeginScale = 1.0 - (offset.x - areaBeginIndex * _distancePerScroller) / _distancePerScroller;
     
-    int beginIndex = floor((offset.x - _emptyBlockLength) / normalItemWith);
-    int showCount = ceil((self.collectionView.bounds.size.width - centerItemWith) / normalItemWith) + 1;
+    int beginIndex = floor((offset.x - _emptyBlockLength) / _distancePerScroller);
+    int showCount = ceil((self.collectionView.bounds.size.width - self.itemSize.width * (1 + _detalScale)) / self.itemSize.width) + 1;
     beginIndex = MAX(0, beginIndex - 1);
     
     CGFloat usedLength = _emptyBlockLength;
     if (beginIndex > 0) {
-        usedLength += (beginIndex/* - 1*/) * (normalItemWith + itemMargin);
+        usedLength += beginIndex * _distancePerScroller;
     }
     
     NSMutableArray* layouts = [NSMutableArray array];
@@ -86,22 +68,22 @@ static const float itemMargin = 10.0;
         
         NSIndexPath* indexPath = [NSIndexPath indexPathForItem:index inSection:0];
         UICollectionViewLayoutAttributes* layoutAttributes = [UICollectionViewLayoutAttributes layoutAttributesForCellWithIndexPath:indexPath];
-        layoutAttributes.size = CGSizeMake(normalItemWith, normalItemWith);
-        float sem = normalItemWith / 2.0;
+        layoutAttributes.size = self.itemSize;
+        float sem = self.itemSize.width / 2.0;
         if (index == areaBeginIndex) {
-            CGFloat scale = 1 + areaBeginScale * _detalScale;
-            sem = normalItemWith / 2.0 * scale;
-            layoutAttributes.center = CGPointMake(usedLength + sem, _centerY);
+            CGFloat scale = 1.0 + areaBeginScale * _detalScale;
+            sem = self.itemSize.width / 2.0 * scale;
+            layoutAttributes.center = CGPointMake(usedLength + sem, _viewCenter.y);
             layoutAttributes.transform = CGAffineTransformMakeScale(scale, scale);
         } else if (index == areaBeginIndex + 1) {
             CGFloat scale = 1.0 + (1.0 - areaBeginScale) * _detalScale;
-            sem = normalItemWith / 2.0 * scale;
-            layoutAttributes.center = CGPointMake(usedLength + sem, _centerY);
+            sem = self.itemSize.width / 2.0 * scale;
+            layoutAttributes.center = CGPointMake(usedLength + sem, _viewCenter.y);
             layoutAttributes.transform = CGAffineTransformMakeScale(scale, scale);
         } else {
-            layoutAttributes.center = CGPointMake(usedLength + sem, _centerY);
+            layoutAttributes.center = CGPointMake(usedLength + sem, _viewCenter.y);
         }
-        usedLength += sem * 2.0 + itemMargin;
+        usedLength += sem * 2.0 + self.minimumInteritemSpacing;
         
         [layouts addObject:layoutAttributes];
     }
