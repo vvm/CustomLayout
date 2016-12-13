@@ -10,11 +10,18 @@
 
 @interface CenterShowLayout ()
 
-@property (nonatomic, assign) float emptyBlockLength;
-@property (nonatomic, assign) float distancePerScroller;
+// length of empty area in header and footer
+@property (nonatomic, assign) CGFloat emptyBlockLength;
+// distance that change a select item should scroll
+@property (nonatomic, assign) CGFloat distancePerScroller;
+// count that one frame can show
+@property (nonatomic, assign) NSInteger showCountOnce;
 
+// width / 2 for UICollectionViewScrollDirectionHorizontal &&
+@property (nonatomic, assign) CGFloat semidiameter;
+// select item should show in this center
 @property (nonatomic, assign) CGPoint viewCenter;
-
+// total item count
 @property (nonatomic, assign) NSInteger totalCount;
 
 @end
@@ -25,21 +32,38 @@
 {
     [super prepareLayout];
     
-    _emptyBlockLength = (self.collectionView.bounds.size.width - self.itemSize.width * (1.0 + _detalScale)) / 2.0;
+    if (self.scrollDirection == UICollectionViewScrollDirectionHorizontal) {
+        _emptyBlockLength = (self.collectionView.bounds.size.width - self.itemSize.width * (1.0 + _detalScale)) / 2.0;
+        _distancePerScroller = self.itemSize.width + self.minimumInteritemSpacing;
+        
+        _showCountOnce = ceil((self.collectionView.bounds.size.width - self.itemSize.width * (1 + _detalScale)) / self.itemSize.width) + 1;
+        _semidiameter = self.itemSize.width / 2.0;
+    } else {
+        _emptyBlockLength = (self.collectionView.bounds.size.height - self.itemSize.height * (1.0 + _detalScale)) / 2.0;
+        _distancePerScroller = self.itemSize.height + self.minimumInteritemSpacing;
+        
+        _showCountOnce = ceil((self.collectionView.bounds.size.height - self.itemSize.height * (1 + _detalScale)) / self.itemSize.height) + 1;
+        _semidiameter = self.itemSize.height / 2.0;
+    }
+
+    
     _viewCenter = CGPointMake(self.collectionView.bounds.size.width / 2.0, self.collectionView.bounds.size.height / 2.0);
     
     NSInteger scetionCount = self.collectionView.numberOfSections;
     NSAssert(scetionCount == 1, @"Only support one section now");
     _totalCount = [self.collectionView numberOfItemsInSection:0];
     
-    _distancePerScroller = self.itemSize.width + self.minimumInteritemSpacing;
 }
 
 - (CGSize)collectionViewContentSize
 {
     CGSize size = self.collectionView.bounds.size;
     if (_totalCount > 2) {
-        size.width += (_totalCount - 1) * (self.itemSize.width + self.minimumInteritemSpacing);
+        if (self.scrollDirection == UICollectionViewScrollDirectionHorizontal) {
+            size.width += (_totalCount - 1) * (self.itemSize.width + self.minimumInteritemSpacing);
+        } else {
+            size.height += (_totalCount - 1) * (self.itemSize.height + self.minimumInteritemSpacing);
+        }
     }
     return size;
 }
@@ -47,11 +71,15 @@
 - (NSArray<UICollectionViewLayoutAttributes *> *)layoutAttributesForElementsInRect:(CGRect)rect
 {
     CGPoint offset = self.collectionView.contentOffset;
-    int areaBeginIndex = floor(offset.x / _distancePerScroller);
-    float areaBeginScale = 1.0 - (offset.x - areaBeginIndex * _distancePerScroller) / _distancePerScroller;
+    // use max instead of direction charge
+    CGFloat offsetValue = MAX(offset.x, offset.y);
     
-    int beginIndex = floor((offset.x - _emptyBlockLength) / _distancePerScroller);
-    int showCount = ceil((self.collectionView.bounds.size.width - self.itemSize.width * (1 + _detalScale)) / self.itemSize.width) + 1;
+    // index for scale area begin at
+    int areaBeginIndex = floor(offsetValue / _distancePerScroller);
+    float areaBeginScale = 1.0 - (offsetValue - areaBeginIndex * _distancePerScroller) / _distancePerScroller;
+    
+    int beginIndex = floor((offsetValue - _emptyBlockLength) / _distancePerScroller);
+    
     beginIndex = MAX(0, beginIndex - 1);
     
     CGFloat usedLength = _emptyBlockLength;
@@ -60,7 +88,7 @@
     }
     
     NSMutableArray* layouts = [NSMutableArray array];
-    for (int i = 0; i <= showCount; i++) {
+    for (int i = 0; i <= _showCountOnce; i++) {
         int index = beginIndex + i;
         if (index >= _totalCount) {
             break;
@@ -69,20 +97,23 @@
         NSIndexPath* indexPath = [NSIndexPath indexPathForItem:index inSection:0];
         UICollectionViewLayoutAttributes* layoutAttributes = [UICollectionViewLayoutAttributes layoutAttributesForCellWithIndexPath:indexPath];
         layoutAttributes.size = self.itemSize;
-        float sem = self.itemSize.width / 2.0;
+        float sem = _semidiameter;
         if (index == areaBeginIndex) {
             CGFloat scale = 1.0 + areaBeginScale * _detalScale;
-            sem = self.itemSize.width / 2.0 * scale;
-            layoutAttributes.center = CGPointMake(usedLength + sem, _viewCenter.y);
+            sem *= scale;
             layoutAttributes.transform = CGAffineTransformMakeScale(scale, scale);
         } else if (index == areaBeginIndex + 1) {
             CGFloat scale = 1.0 + (1.0 - areaBeginScale) * _detalScale;
-            sem = self.itemSize.width / 2.0 * scale;
-            layoutAttributes.center = CGPointMake(usedLength + sem, _viewCenter.y);
+            sem *= scale;
             layoutAttributes.transform = CGAffineTransformMakeScale(scale, scale);
         } else {
-            layoutAttributes.center = CGPointMake(usedLength + sem, _viewCenter.y);
         }
+        if (self.scrollDirection == UICollectionViewScrollDirectionHorizontal) {
+            layoutAttributes.center = CGPointMake(usedLength + sem, _viewCenter.y);
+        } else {
+            layoutAttributes.center = CGPointMake(_viewCenter.x, usedLength + sem);
+        }
+        
         usedLength += sem * 2.0 + self.minimumInteritemSpacing;
         
         [layouts addObject:layoutAttributes];
@@ -98,15 +129,30 @@
 // change offset after scroll
 - (CGPoint)targetContentOffsetForProposedContentOffset:(CGPoint)proposedContentOffset withScrollingVelocity:(CGPoint)velocity
 {
-    int areaBeginIndex = floor(proposedContentOffset.x / _distancePerScroller);
-    float scrollCress = proposedContentOffset.x - areaBeginIndex * _distancePerScroller;
+    CGFloat offsetValue = (self.scrollDirection == UICollectionViewScrollDirectionHorizontal) ? proposedContentOffset.x : proposedContentOffset.y;
+    
+    int areaBeginIndex = floor(offsetValue / _distancePerScroller);
+    float scrollCress = offsetValue - areaBeginIndex * _distancePerScroller;
+    NSInteger showIndex = 0;
     if (scrollCress * 2.0 > _distancePerScroller) {
-        proposedContentOffset.x = MIN(areaBeginIndex + 1, _totalCount - 1) * _distancePerScroller;
+        showIndex = MIN(areaBeginIndex + 1, _totalCount - 1) ;
     } else {
-        proposedContentOffset.x = MAX(areaBeginIndex, 0) * _distancePerScroller;
+        showIndex = MAX(areaBeginIndex, 0);
+    }
+    
+    if (self.scrollDirection == UICollectionViewScrollDirectionHorizontal) {
+        proposedContentOffset.x = showIndex * _distancePerScroller;
+    } else {
+        proposedContentOffset.y = showIndex * _distancePerScroller;
     }
     
     return proposedContentOffset;
+}
+
+#pragma mark - 
+- (CGSize)size:(CGSize)size multipliedBy:(CGFloat)multiplier
+{
+    return CGSizeMake(size.width * multiplier, size.height * multiplier);
 }
 
 @end
